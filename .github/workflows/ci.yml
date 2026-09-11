@@ -105,89 +105,83 @@ jobs:
           pytest -v
 
 
-  # =========================================================
-  # Build and Push Docker Images
-  # =========================================================
-  build-and-push:
-    name: Build and Push ${{ matrix.image }}
-    runs-on: ubuntu-latest
+ # =========================================================
+# Build and Push Docker Images
+# =========================================================
+build-and-push:
+  name: Build and Push ${{ matrix.image }}
+  runs-on: ubuntu-latest
 
-    # IMPORTANT:
-    # Docker images are built and pushed only when ALL
-    # backend tests have completed successfully.
-    needs:
-      - backend-test
+  needs:
+    - backend-test
 
-    # Run for either a push to main or a manual workflow run
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+  if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
-    strategy:
-      fail-fast: false
+  strategy:
+    fail-fast: false
 
-      matrix:
-        include:
-          - service: frontend
-            image: koalatech-frontend
+    matrix:
+      include:
+        - service: frontend
+          image: koalatech-frontend
 
-          - service: user-service
-            image: koalatech-user-service
+        - service: user-service
+          image: koalatech-user-service
 
-          - service: student-service
-            image: koalatech-student-service
+        - service: student-service
+          image: koalatech-student-service
 
-          - service: lecturer-service
-            image: koalatech-lecturer-service
+        - service: lecturer-service
+          image: koalatech-lecturer-service
 
-          - service: course-service
-            image: koalatech-course-service
+        - service: course-service
+          image: koalatech-course-service
 
-          - service: enrollment-service
-            image: koalatech-enrollment-service
+        - service: enrollment-service
+          image: koalatech-enrollment-service
 
-    steps:
+  steps:
 
-      # Node.js 24 compatible version
-      - name: Checkout repository
-        uses: actions/checkout@v5
+    - name: Checkout repository
+      uses: actions/checkout@v5
 
-      # Authenticate GitHub Actions with Microsoft Azure
-      # Node.js 24 compatible Azure Login version
-      - name: Login to Azure
-        uses: azure/login@v3
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: Login to Azure
+      uses: azure/login@v3
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Temporary check to verify that GitHub repository
-      # variables are available to the workflow
-      - name: Check ACR variables
-        run: |
-          echo "ACR_NAME=${{ vars.ACR_NAME }}"
-          echo "ACR_LOGIN_SERVER=${{ vars.ACR_LOGIN_SERVER }}"
+    - name: Check ACR configuration
+      run: |
+        if [ -z "${{ secrets.ACR_NAME }}" ]; then
+          echo "ERROR: ACR_NAME is empty"
+          exit 1
+        fi
 
-      # Authenticate with Azure Container Registry
-      - name: Login to Azure Container Registry
-        run: |
-          az acr login --name "${{ vars.ACR_NAME }}"
+        if [ -z "${{ secrets.ACR_LOGIN_SERVER }}" ]; then
+          echo "ERROR: ACR_LOGIN_SERVER is empty"
+          exit 1
+        fi
 
-      # Build the Docker image with two tags:
-      # 1. Git commit SHA
-      # 2. latest
-      - name: Build Docker image
-        run: |
-          docker build \
-            --platform linux/amd64 \
-            -t "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}" \
-            -t "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest" \
-            "./${{ matrix.service }}"
+        echo "ACR configuration is available"
 
-      # Push the commit-specific image
-      - name: Push Docker image with commit SHA
-        run: |
-          docker push \
-            "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}"
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name "${{ secrets.ACR_NAME }}"
 
-      # Push the latest image
-      - name: Push Docker image with latest tag
-        run: |
-          docker push \
-            "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest"
+    - name: Build Docker image
+      run: |
+        docker build \
+          --platform linux/amd64 \
+          -t "${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}" \
+          -t "${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest" \
+          "./${{ matrix.service }}"
+
+    - name: Push Docker image with commit SHA
+      run: |
+        docker push \
+          "${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}"
+
+    - name: Push Docker image with latest tag
+      run: |
+        docker push \
+          "${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest"
