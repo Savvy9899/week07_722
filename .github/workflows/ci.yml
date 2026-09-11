@@ -143,6 +143,7 @@ jobs:
     # backend tests have completed successfully.
     needs:
       - backend-test
+      - frontend-test
 
     # Run for either a push to main or a manual workflow run
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
