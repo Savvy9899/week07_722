@@ -1,8 +1,13 @@
 name: CI Pipeline
 
 on:
-  # Manual trigger for the workflow
+  # Allow the workflow to be started manually
   workflow_dispatch:
+
+  # Automatically run CI when changes are pushed to main
+  push:
+    branches:
+      - main
 
 
 jobs:
@@ -39,6 +44,7 @@ jobs:
             database: enrollments
             port: 5437
 
+    # PostgreSQL container used during backend testing
     services:
       postgres:
         image: postgres:16
@@ -77,9 +83,11 @@ jobs:
 
     steps:
 
+      # Node.js 24 compatible version
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # Node.js 24 compatible version
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -104,11 +112,13 @@ jobs:
     name: Build and Push ${{ matrix.image }}
     runs-on: ubuntu-latest
 
-    # All backend tests must pass before this job starts
+    # IMPORTANT:
+    # Docker images are built and pushed only when ALL
+    # backend tests have completed successfully.
     needs:
       - backend-test
 
-    # Build and push when code is pushed to main or manually triggered
+    # Run for either a push to main or a manual workflow run
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     strategy:
@@ -136,32 +146,48 @@ jobs:
 
     steps:
 
+      # Node.js 24 compatible version
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # Authenticate GitHub Actions with Microsoft Azure
+      # Node.js 24 compatible Azure Login version
       - name: Login to Azure
         uses: azure/login@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Temporary check to verify that GitHub repository
+      # variables are available to the workflow
+      - name: Check ACR variables
+        run: |
+          echo "ACR_NAME=${{ vars.ACR_NAME }}"
+          echo "ACR_LOGIN_SERVER=${{ vars.ACR_LOGIN_SERVER }}"
+
+      # Authenticate with Azure Container Registry
       - name: Login to Azure Container Registry
         run: |
-          az acr login --name ${{ vars.ACR_NAME }}
+          az acr login --name "${{ vars.ACR_NAME }}"
 
+      # Build the Docker image with two tags:
+      # 1. Git commit SHA
+      # 2. latest
       - name: Build Docker image
         run: |
           docker build \
             --platform linux/amd64 \
-            -t ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }} \
-            -t ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest \
-            ./${{ matrix.service }}
+            -t "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}" \
+            -t "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest" \
+            "./${{ matrix.service }}"
 
+      # Push the commit-specific image
       - name: Push Docker image with commit SHA
         run: |
           docker push \
-            ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}
+            "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:${{ github.sha }}"
 
+      # Push the latest image
       - name: Push Docker image with latest tag
         run: |
           docker push \
-            ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest
+            "${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.image }}:latest"
